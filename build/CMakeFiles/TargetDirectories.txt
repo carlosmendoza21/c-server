@@ -1,0 +1,3 @@
+/home/csme/c-server/build/CMakeFiles/c-server.dir
+/home/csme/c-server/build/CMakeFiles/edit_cache.dir
+/home/csme/c-server/build/CMakeFiles/rebuild_cache.dir
