@@ -153,6 +153,30 @@ src/main.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/c-server.dir/build.make CMakeFiles/c-server.dir/src/main.c.s
 .PHONY : src/main.c.s
 
+src/setup.o: src/setup.c.o
+.PHONY : src/setup.o
+
+# target to build an object file
+src/setup.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/c-server.dir/build.make CMakeFiles/c-server.dir/src/setup.c.o
+.PHONY : src/setup.c.o
+
+src/setup.i: src/setup.c.i
+.PHONY : src/setup.i
+
+# target to preprocess a source file
+src/setup.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/c-server.dir/build.make CMakeFiles/c-server.dir/src/setup.c.i
+.PHONY : src/setup.c.i
+
+src/setup.s: src/setup.c.s
+.PHONY : src/setup.s
+
+# target to generate assembly for a file
+src/setup.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/c-server.dir/build.make CMakeFiles/c-server.dir/src/setup.c.s
+.PHONY : src/setup.c.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -165,6 +189,9 @@ help:
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
+	@echo "... src/setup.o"
+	@echo "... src/setup.i"
+	@echo "... src/setup.s"
 .PHONY : help
 
 

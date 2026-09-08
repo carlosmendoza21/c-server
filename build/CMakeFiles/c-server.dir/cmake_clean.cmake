@@ -1,6 +1,8 @@
 file(REMOVE_RECURSE
   "CMakeFiles/c-server.dir/src/main.c.o"
   "CMakeFiles/c-server.dir/src/main.c.o.d"
+  "CMakeFiles/c-server.dir/src/setup.c.o"
+  "CMakeFiles/c-server.dir/src/setup.c.o.d"
   "c-server"
   "c-server.pdb"
 )

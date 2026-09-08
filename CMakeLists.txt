@@ -13,7 +13,7 @@ set(CMAKE_C_FLAGS_RELEASE "-02 -Wall -Wextra")
 
 find_package(Threads REQUIRED)
 
-add_executable(c-server src/main.c)
+add_executable(c-server src/main.c src/setup.c)
 
 target_include_directories(c-server PRIVATE include)
 target_link_libraries(c-server PRIVATE Threads::Threads)
