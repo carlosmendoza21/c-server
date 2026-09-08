@@ -72,4 +72,6 @@ CMakeFiles/c-server.dir/src/main.c.o: /home/csme/c-server/src/main.c \
  /usr/include/x86_64-linux-gnu/bits/confname.h \
  /usr/include/x86_64-linux-gnu/bits/getopt_posix.h \
  /usr/include/x86_64-linux-gnu/bits/getopt_core.h \
- /usr/include/x86_64-linux-gnu/bits/unistd_ext.h
+ /usr/include/x86_64-linux-gnu/bits/unistd_ext.h \
+ /home/csme/c-server/include/server.h \
+ /home/csme/c-server/include/request.h

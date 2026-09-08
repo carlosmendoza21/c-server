@@ -9,6 +9,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/csme/c-server/src/main.c" "CMakeFiles/c-server.dir/src/main.c.o" "gcc" "CMakeFiles/c-server.dir/src/main.c.o.d"
+  "/home/csme/c-server/src/requests.c" "CMakeFiles/c-server.dir/src/requests.c.o" "gcc" "CMakeFiles/c-server.dir/src/requests.c.o.d"
   "/home/csme/c-server/src/setup.c" "CMakeFiles/c-server.dir/src/setup.c.o" "gcc" "CMakeFiles/c-server.dir/src/setup.c.o.d"
   )
 

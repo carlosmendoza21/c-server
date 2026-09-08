@@ -153,6 +153,30 @@ src/main.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/c-server.dir/build.make CMakeFiles/c-server.dir/src/main.c.s
 .PHONY : src/main.c.s
 
+src/requests.o: src/requests.c.o
+.PHONY : src/requests.o
+
+# target to build an object file
+src/requests.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/c-server.dir/build.make CMakeFiles/c-server.dir/src/requests.c.o
+.PHONY : src/requests.c.o
+
+src/requests.i: src/requests.c.i
+.PHONY : src/requests.i
+
+# target to preprocess a source file
+src/requests.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/c-server.dir/build.make CMakeFiles/c-server.dir/src/requests.c.i
+.PHONY : src/requests.c.i
+
+src/requests.s: src/requests.c.s
+.PHONY : src/requests.s
+
+# target to generate assembly for a file
+src/requests.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/c-server.dir/build.make CMakeFiles/c-server.dir/src/requests.c.s
+.PHONY : src/requests.c.s
+
 src/setup.o: src/setup.c.o
 .PHONY : src/setup.o
 
@@ -189,6 +213,9 @@ help:
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
+	@echo "... src/requests.o"
+	@echo "... src/requests.i"
+	@echo "... src/requests.s"
 	@echo "... src/setup.o"
 	@echo "... src/setup.i"
 	@echo "... src/setup.s"

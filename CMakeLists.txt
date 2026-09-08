@@ -9,11 +9,11 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(CMAKE_C_FLAGS_DEBUG "-g -Wall -Wextra -fsanitize=address")
-set(CMAKE_C_FLAGS_RELEASE "-02 -Wall -Wextra")
+set(CMAKE_C_FLAGS_RELEASE "-O2 -Wall -Wextra")
 
 find_package(Threads REQUIRED)
 
-add_executable(c-server src/main.c src/setup.c)
+add_executable(c-server src/main.c src/setup.c src/requests.c)
 
 target_include_directories(c-server PRIVATE include)
 target_link_libraries(c-server PRIVATE Threads::Threads)
