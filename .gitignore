@@ -1,0 +1,23 @@
+# Build output
+build/
+cmake-build-*/
+
+# Compiled files (in case you ever compile outside build/)
+*.o
+*.a
+*.so
+*.out
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Profiling and fuzzing output (Phases 3–4)
+perf.data*
+*.svg
+crash-*
+leak-*
+timeout-*
