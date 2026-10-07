@@ -3,19 +3,20 @@
 #include <netinet/in.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include "server.h"
 #include "request.h"
 
 
 
-int main(int argc, char *argv[]) {
+int main(void) {
     int fd = create_listen_socket(8080);
     if(fd < 0) {
         return 1;
     }
 
-
-    handle_requests(fd);
+    signal(SIGPIPE, SIG_IGN);
+    perma_serve(fd);
 
 
     close(fd);

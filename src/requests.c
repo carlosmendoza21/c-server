@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-int handle_requests(int fd) {
+static void handle_requests(int fd) {
 
     char requestBuffer[1024];
 
@@ -14,24 +14,30 @@ int handle_requests(int fd) {
     char version[16];
 
 
-    int clientSocket = accept(fd, NULL, NULL);
-    if(clientSocket < 0) {
-        perror("accept failed");
-        return 1;
-    }
+    int clientSocket = fd;
 
     int numberOfBytesRead = read(clientSocket, requestBuffer, sizeof(requestBuffer) - 1);
 
+    if (numberOfBytesRead == 0) {
+        printf("Connection closed by client\n");
+        close(clientSocket);
+        return;
+    }
     if(numberOfBytesRead < 0) {
         perror("read failed");
-        return 1;
+        close(clientSocket);
+        return;
     }
 
     requestBuffer[numberOfBytesRead] = '\0';
 
     printf("Received request:\n%s\n", requestBuffer);
 
-    sscanf(requestBuffer, "%15s %255s %15s", method, path, version);
+    if (sscanf(requestBuffer, "%15s %255s %15s", method, path, version) != 3) {
+        printf("Failed to parse request\n");
+        close(clientSocket);
+        return;
+    }
 
     printf("Method: %s\n", method);
     printf("Path: %s\n", path);   
@@ -43,7 +49,7 @@ int handle_requests(int fd) {
         char *body = "<html><body><h1>Working!</h1></body></html>";
         snprintf(response, sizeof(response),
                  "HTTP/1.1 200 OK\r\n"
-                 "Content-Type: text/plain\r\n"
+                 "Content-Type: text/html\r\n"
                  "Content-Length: %zu\r\n"
                  "\r\n"
                  "%s", strlen(body), body);
@@ -51,7 +57,7 @@ int handle_requests(int fd) {
         char *body = "<html><body><h1>404 Not Found</h1></body></html>";
         snprintf(response, sizeof(response),
                 "HTTP/1.1 404 Not Found\r\n"
-                "Content-Type: text/plain\r\n"
+                "Content-Type: text/html\r\n"
                 "Content-Length: %zu\r\n"
                 "\r\n"
                 "%s",
@@ -63,5 +69,18 @@ int handle_requests(int fd) {
 
     close(clientSocket);
 
-    return 0;
+    return;
 }
+
+
+void perma_serve(int listening_fd){
+    while (1) {
+        int client_fd = accept(listening_fd, NULL, NULL);
+        if(client_fd < 0) {
+            perror("accept failed");
+            continue;
+        }
+        handle_requests(client_fd);
+
+    }
+    }

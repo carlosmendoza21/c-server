@@ -1,6 +1,6 @@
 #ifndef REQUEST_H
 #define REQUEST_H
 
-int handle_requests(int fd);
+void perma_serve(int listening_fd);
 
 #endif  
