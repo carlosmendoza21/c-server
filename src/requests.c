@@ -47,6 +47,43 @@ static ssize_t read_request(int clientSocket, char *buf, size_t cap) {
     }
 }
 
+// Sends the entire buffer to the clientSocket, handling partial sends and interruptions.
+static int send_all(int fd, const char *buf, size_t len){
+    size_t total_sent = 0;
+
+    while (total_sent < len) {
+        ssize_t sent = send(fd, buf + total_sent, len - total_sent, 0);
+        if (sent < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            perror("send failed");
+            return -1;
+        }
+        total_sent += sent;
+    }
+    return 0;
+}
+
+// Sends a complete HTTP response to the clientSocket with the given status, content type, and body.
+static void send_response(int clientSocket, const char *status, const char *contentType, const char *body) {
+    char response[1024];
+    int len = snprintf(response, sizeof(response),
+             "HTTP/1.1 %s\r\n"
+             "Content-Type: %s\r\n"
+             "Content-Length: %zu\r\n"
+             "Connection: close\r\n"
+             "\r\n"
+             "%s",
+             status, contentType, strlen(body), body);
+
+    if (len < 0 || (size_t)len >= sizeof(response)) {
+        printf("Response too large to send\n");
+        return;
+    }
+    send_all(clientSocket, response, len);
+}
+
 static void handle_requests(int clientSocket) {
 
     char requestBuffer[MAX_REQUEST_SIZE];
@@ -76,28 +113,13 @@ static void handle_requests(int clientSocket) {
     printf("Path: %s\n", path);
     printf("Version: %s\n", version);
 
-    char response[1024];
-
     if (strcmp(path, "/") == 0) {
         char *body = "<html><body><h1>Working!</h1></body></html>";
-        snprintf(response, sizeof(response),
-                 "HTTP/1.1 200 OK\r\n"
-                 "Content-Type: text/html\r\n"
-                 "Content-Length: %zu\r\n"
-                 "\r\n"
-                 "%s", strlen(body), body);
+        send_response(clientSocket, "200 OK", "text/html", body);
     } else {
         char *body = "<html><body><h1>404 Not Found</h1></body></html>";
-        snprintf(response, sizeof(response),
-                "HTTP/1.1 404 Not Found\r\n"
-                "Content-Type: text/html\r\n"
-                "Content-Length: %zu\r\n"
-                "\r\n"
-                "%s",
-                strlen(body), body);
+        send_response(clientSocket, "404 Not Found", "text/html", body);
     }
-
-    send(clientSocket, response, strlen(response), 0);
 
 cleanup:
     close(clientSocket);
