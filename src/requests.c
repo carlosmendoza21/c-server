@@ -9,22 +9,30 @@
 #define MAX_REQUEST_SIZE 8192
 #define READ_TIMEOUT_SECONDS 5
 
-// Reads from clientSocket until the end of the headers ("\r\n\r\n").
-// Returns the number of bytes read, or -1 if the client closed early,
-// timed out, hit a read error, or sent more than cap - 1 bytes.
-static ssize_t read_request(int clientSocket, char *buf, size_t cap) {
+enum read_result {
+    READ_SUCCESS,
+    READ_CLOSED,
+    READ_TIMEOUT,
+    READ_ERROR,
+    READ_TOO_LARGE
+};
+
+// Reads an HTTP request from the clientSocket into buf, ensuring it does not exceed cap bytes.
+// Returns an enum indicating the result of the read operation.
+
+static enum read_result read_request(int clientSocket, char *buf, size_t cap) {
     size_t total = 0;
 
     while (1) {
         if (total >= cap - 1) {
             printf("Request too large\n");
-            return -1;
+            return READ_TOO_LARGE;
         }
 
         ssize_t n = read(clientSocket, buf + total, cap - 1 - total);
         if (n == 0) {
             printf("Connection closed by client\n");
-            return -1;
+            return READ_CLOSED;
         }
         if (n < 0) {
             if (errno == EINTR) {
@@ -32,17 +40,18 @@ static ssize_t read_request(int clientSocket, char *buf, size_t cap) {
             }
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 printf("Client timed out\n");
+                return READ_TIMEOUT;
             } else {
                 perror("read failed");
+                return READ_ERROR;  
             }
-            return -1;
         }
 
         total += n;
         buf[total] = '\0';
 
         if (strstr(buf, "\r\n\r\n")) {
-            return (ssize_t)total;
+            return READ_SUCCESS;
         }
     }
 }
@@ -98,20 +107,40 @@ static void handle_requests(int clientSocket) {
         goto cleanup;
     }
 
-    if (read_request(clientSocket, requestBuffer, sizeof(requestBuffer)) < 0) {
-        goto cleanup;
+    enum read_result result = read_request(clientSocket, requestBuffer, sizeof(requestBuffer));
+    
+    switch (result) {
+        case READ_SUCCESS:
+            break;
+        case READ_CLOSED:
+        case READ_ERROR:
+            goto cleanup;
+        case READ_TIMEOUT:
+            send_response(clientSocket, "408 Request Timeout", "text/plain", "Request timed out");
+            goto cleanup;
+        case READ_TOO_LARGE:
+            send_response(clientSocket, "431 Request Header Fields Too Large", "text/plain", "Request too large");
+            goto cleanup;
     }
 
     printf("Received request:\n%s\n", requestBuffer);
 
     if (sscanf(requestBuffer, "%15s %255s %15s", method, path, version) != 3) {
         printf("Failed to parse request\n");
+        send_response(clientSocket, "400 Bad Request", "text/plain", "Malformed request line");
         goto cleanup;
     }
 
     printf("Method: %s\n", method);
     printf("Path: %s\n", path);
     printf("Version: %s\n", version);
+
+    if (strcmp(method, "GET") != 0) {
+        printf("Unsupported method: %s\n", method);
+        send_response(clientSocket, "405 Method Not Allowed", "text/plain", "Only GET method is supported");
+        //TODO: Add Allow header
+        goto cleanup;
+    }
 
     if (strcmp(path, "/") == 0) {
         char *body = "<html><body><h1>Working!</h1></body></html>";
