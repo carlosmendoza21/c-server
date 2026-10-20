@@ -96,8 +96,9 @@ static void send_response(int clientSocket, const char *status, const char *cont
     }
     send_all(clientSocket, response, len);
 }
-//Converts a URL path to a file system path by prepending the document root and handling query parameters and default index files.
 
+// Converts a URL path to a file system path by prepending the document root and handling query parameters and default index files.
+// Returns 0 on success, -1 if the result doesn't fit in filePath.
 static int build_file_path(const char *requestPath, char *filePath, size_t filePathSize) {
     int len = snprintf(filePath, filePathSize, "%s%s", DOC_ROOT, requestPath);
     if (len < 0 || (size_t)len >= filePathSize) {
@@ -107,52 +108,92 @@ static int build_file_path(const char *requestPath, char *filePath, size_t fileP
     size_t length_of_file_path = strcspn(filePath, "?");
     filePath[length_of_file_path] = '\0';
 
-    //if the path ends with a slash, append index.html
+    // If the path ends with a slash, append index.html
     if (filePath[length_of_file_path - 1] == '/') {
         if (length_of_file_path + strlen("index.html") >= filePathSize) {
             printf("File path too long for index.html\n");
             return -1;
         }
         strcat(filePath, "index.html");
-    }             
+    }
     return 0;
 }
 
-static void serve_file(int clientSocket, const char *filePath) {
-    char filepath[512];
+// Serves the file at DOC_ROOT + urlPath, or an error response if it can't.
+// Does not close clientSocket; handle_requests does that.
+static void serve_file(int clientSocket, const char *urlPath) {
+    char filePath[512];
     char header[512];
     char chunk[FILE_CHUNK_SIZE];
     struct stat st;
-    
-    if (build_file_path(filePath, filepath, sizeof(filepath)) < 0) {
-        send_response(clientSocket, "400 Bad Request", "text/plain", "Invalid file path");
+
+    if (build_file_path(urlPath, filePath, sizeof(filePath)) < 0) {
+        send_response(clientSocket, "414 URI Too Long", "text/plain", "Request path too long");
         return;
     }
 
-    if (stat(filepath, &st) < 0) {
+    int file_fd = open(filePath, O_RDONLY);
+    if (file_fd < 0) {
+        if (errno == ENOENT) {
+            send_response(clientSocket, "404 Not Found", "text/plain", "File not found");
+        } else if (errno == EACCES) {
+            send_response(clientSocket, "403 Forbidden", "text/plain", "Forbidden");
+        } else {
+            perror("open failed");
+            send_response(clientSocket, "500 Internal Server Error", "text/plain", "Failed to open file");
+        }
+        return;
+    }
+
+    // From here on file_fd is open, so every exit goes through close_file.
+
+    // fstat the open file (not the path) so we check the same file we send.
+    if (fstat(file_fd, &st) < 0) {
+        perror("fstat failed");
+        send_response(clientSocket, "500 Internal Server Error", "text/plain", "Failed to read file info");
+        goto close_file;
+    }
+    if (!S_ISREG(st.st_mode)) {
         send_response(clientSocket, "404 Not Found", "text/plain", "File not found");
-        return;
+        goto close_file;
     }
 
-    // Open the file and send it in chunks
-    FILE *file = fopen(filepath, "r");
-    if (!file) {
-        send_response(clientSocket, "500 Internal Server Error", "text/plain", "Failed to open file");
-        return;
+    // TODO: pick Content-Type from the file extension (MIME types step)
+    int len = snprintf(header, sizeof(header),
+             "HTTP/1.1 200 OK\r\n"
+             "Content-Type: text/html\r\n"
+             "Content-Length: %lld\r\n"
+             "Connection: close\r\n"
+             "\r\n",
+             (long long)st.st_size);
+    if (len < 0 || (size_t)len >= sizeof(header)) {
+        printf("Response header too large\n");
+        goto close_file;
+    }
+    if (send_all(clientSocket, header, len) < 0) {
+        goto close_file;
     }
 
-    // Send the response headers
-    snprintf(header, sizeof(header), "HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Length: %ld\r\nConnection: close\r\n\r\n", get_content_type(filepath), st.st_size);
-    send_all(clientSocket, header, strlen(header));
-
-    
-    // Send the file contents in chunks
-    size_t bytes_read;
-    while ((bytes_read = fread(chunk, 1, sizeof(chunk), file)) > 0) {
-        send_all(clientSocket, chunk, bytes_read);
+    // Headers are already sent, so errors from here on can only stop the transfer.
+    while (1) {
+        ssize_t n = read(file_fd, chunk, sizeof(chunk));
+        if (n == 0) {
+            break;
+        }
+        if (n < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            perror("read file failed");
+            break;
+        }
+        if (send_all(clientSocket, chunk, n) < 0) {
+            break;
+        }
     }
 
-    fclose(file);
+close_file:
+    close(file_fd);
 }
 
 static void handle_requests(int clientSocket) {
@@ -204,13 +245,7 @@ static void handle_requests(int clientSocket) {
         goto cleanup;
     }
 
-    if (strcmp(path, "/") == 0) {
-        char *body = "<html><body><h1>Working!</h1></body></html>";
-        send_response(clientSocket, "200 OK", "text/html", body);
-    } else {
-        char *body = "<html><body><h1>404 Not Found</h1></body></html>";
-        send_response(clientSocket, "404 Not Found", "text/html", body);
-    }
+    serve_file(clientSocket, path);
 
 cleanup:
     close(clientSocket);
