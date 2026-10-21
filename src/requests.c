@@ -21,6 +21,13 @@ enum read_result {
     READ_TOO_LARGE
 };
 
+enum path_result {
+    PATH_SUCCESS,
+    PATH_TOO_LONG,
+    PATH_BAD_REQUEST,
+    PATH_FORBIDDEN
+};
+
 // Reads an HTTP request from the clientSocket into buf, ensuring it does not exceed cap bytes.
 // Returns an enum indicating the result of the read operation.
 
@@ -98,12 +105,12 @@ static void send_response(int clientSocket, const char *status, const char *cont
 }
 
 // Converts a URL path to a file system path by prepending the document root and handling query parameters and default index files.
-// Returns 0 on success, -1 if the result doesn't fit in filePath.
-static int build_file_path(const char *requestPath, char *filePath, size_t filePathSize) {
+// Returns PATH_SUCCESS, or the reason the path was rejected.
+static enum path_result build_file_path(const char *requestPath, char *filePath, size_t filePathSize) {
     int len = snprintf(filePath, filePathSize, "%s%s", DOC_ROOT, requestPath);
     if (len < 0 || (size_t)len >= filePathSize) {
         printf("File path too long\n");
-        return -1;
+        return PATH_TOO_LONG;
     }
     size_t length_of_file_path = strcspn(filePath, "?");
     filePath[length_of_file_path] = '\0';
@@ -112,11 +119,11 @@ static int build_file_path(const char *requestPath, char *filePath, size_t fileP
     if (filePath[length_of_file_path - 1] == '/') {
         if (length_of_file_path + strlen("index.html") >= filePathSize) {
             printf("File path too long for index.html\n");
-            return -1;
+            return PATH_TOO_LONG;
         }
         strcat(filePath, "index.html");
     }
-    return 0;
+    return PATH_SUCCESS;
 }
 
 // Serves the file at DOC_ROOT + urlPath, or an error response if it can't.
@@ -127,9 +134,18 @@ static void serve_file(int clientSocket, const char *urlPath) {
     char chunk[FILE_CHUNK_SIZE];
     struct stat st;
 
-    if (build_file_path(urlPath, filePath, sizeof(filePath)) < 0) {
-        send_response(clientSocket, "414 URI Too Long", "text/plain", "Request path too long");
-        return;
+    switch (build_file_path(urlPath, filePath, sizeof(filePath))) {
+        case PATH_SUCCESS:
+            break;
+        case PATH_TOO_LONG:
+            send_response(clientSocket, "414 URI Too Long", "text/plain", "Request path too long");
+            return;
+        case PATH_BAD_REQUEST:
+            send_response(clientSocket, "400 Bad Request", "text/plain", "Bad request path");
+            return;
+        case PATH_FORBIDDEN:
+            send_response(clientSocket, "403 Forbidden", "text/plain", "Forbidden");
+            return;
     }
 
     int file_fd = open(filePath, O_RDONLY);
