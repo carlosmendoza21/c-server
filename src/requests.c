@@ -107,6 +107,10 @@ static void send_response(int clientSocket, const char *status, const char *cont
 // Converts a URL path to a file system path by prepending the document root and handling query parameters and default index files.
 // Returns PATH_SUCCESS, or the reason the path was rejected.
 static enum path_result build_file_path(const char *requestPath, char *filePath, size_t filePathSize) {
+    if (requestPath[0] != '/') {
+        printf("Request path does not start with '/'\n");
+        return PATH_BAD_REQUEST;
+    }
     int len = snprintf(filePath, filePathSize, "%s%s", DOC_ROOT, requestPath);
     if (len < 0 || (size_t)len >= filePathSize) {
         printf("File path too long\n");
