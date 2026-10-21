@@ -10,6 +10,11 @@
 
 
 int main(void) {
+    if (init_doc_root() < 0) {
+        fprintf(stderr, "Could not find the document root. Run the server from the repo root.\n");
+        return 1;
+    }
+
     int fd = create_listen_socket(8080);
     if(fd < 0) {
         return 1;

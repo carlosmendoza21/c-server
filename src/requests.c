@@ -7,6 +7,9 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <limits.h>
+#include <stdlib.h>
+#include "request.h"
 
 #define MAX_REQUEST_SIZE 8192
 #define READ_TIMEOUT_SECONDS 5
@@ -27,6 +30,22 @@ enum path_result {
     PATH_BAD_REQUEST,
     PATH_FORBIDDEN
 };
+
+// Absolute, symlink-free path of DOC_ROOT, set once by init_doc_root().
+static char resolved_root[PATH_MAX];
+static size_t resolved_root_len;
+
+// Resolves DOC_ROOT to an absolute path. Call once at startup.
+// Returns 0 on success, -1 if DOC_ROOT doesn't exist.
+int init_doc_root(void) {
+    if (realpath(DOC_ROOT, resolved_root) == NULL) {
+        perror("realpath(DOC_ROOT) failed");
+        return -1;
+    }
+    resolved_root_len = strlen(resolved_root);
+    printf("Serving files from %s\n", resolved_root);
+    return 0;
+}
 
 // Reads an HTTP request from the clientSocket into buf, ensuring it does not exceed cap bytes.
 // Returns an enum indicating the result of the read operation.
@@ -152,10 +171,22 @@ static enum path_result build_file_path(const char *requestPath, char *filePath,
     return PATH_SUCCESS;
 }
 
+// Returns 1 if resolved is resolved_root itself or a path inside it, else 0.
+// The character after the prefix must be '/' or '\0', so a sibling
+// directory like ".../public_secret" doesn't count as inside ".../public".
+static int is_inside_root(const char *resolved) {
+    if (strncmp(resolved, resolved_root, resolved_root_len) != 0) {
+        return 0;
+    }
+    char next = resolved[resolved_root_len];
+    return next == '/' || next == '\0';
+}
+
 // Serves the file at DOC_ROOT + urlPath, or an error response if it can't.
 // Does not close clientSocket; handle_requests does that.
 static void serve_file(int clientSocket, const char *urlPath) {
     char filePath[512];
+    char resolvedPath[PATH_MAX];
     char header[512];
     char chunk[FILE_CHUNK_SIZE];
     struct stat st;
@@ -174,7 +205,28 @@ static void serve_file(int clientSocket, const char *urlPath) {
             return;
     }
 
-    int file_fd = open(filePath, O_RDONLY);
+    // Resolve symlinks, "." and ".." to the path the kernel will actually open,
+    // then make sure it's still inside the document root.
+    if (realpath(filePath, resolvedPath) == NULL) {
+        if (errno == ENOENT || errno == ENOTDIR) {
+            send_response(clientSocket, "404 Not Found", "text/plain", "File not found");
+        } else if (errno == EACCES) {
+            send_response(clientSocket, "403 Forbidden", "text/plain", "Forbidden");
+        } else {
+            perror("realpath failed");
+            send_response(clientSocket, "500 Internal Server Error", "text/plain", "Failed to resolve path");
+        }
+        return;
+    }
+
+    if (!is_inside_root(resolvedPath)) {
+        printf("Path escapes document root: %s -> %s\n", urlPath, resolvedPath);
+        send_response(clientSocket, "403 Forbidden", "text/plain", "Forbidden");
+        return;
+    }
+
+    // Open the path we just checked, not the original one.
+    int file_fd = open(resolvedPath, O_RDONLY);
     if (file_fd < 0) {
         if (errno == ENOENT) {
             send_response(clientSocket, "404 Not Found", "text/plain", "File not found");
