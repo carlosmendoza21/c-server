@@ -1,6 +1,6 @@
 # c-server
 
-> **Work in progress.** The server correctly serves static files and rejects malformed and malicious requests. Concurrency, performance work and an automated test suite are next.
+> **Work in progress.** The server correctly serves static files and rejects malformed and malicious requests, with an automated test suite covering both. Concurrency and performance work are next.
 
 A from-scratch HTTP/1.1 static file server in C, built to explore low-level socket programming on Linux and progressively add production-grade performance and security techniques.
 
@@ -78,6 +78,35 @@ curl -i -X POST http://localhost:8080/                      # 405
 curl -i --path-as-is http://localhost:8080/../README.md     # 403, traversal blocked
 ```
 
+## Testing
+
+```sh
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+CTest runs two suites, both built with AddressSanitizer:
+
+**Unit tests** ([`tests/test_paths.c`](tests/test_paths.c), 40 checks): call the path-handling functions directly, with no server running. `test_paths.c` includes `requests.c` so it can reach its `static` functions.
+- `has_dot_dot_segment`: whole-segment `..` detection, including names like `notes..txt` and `..hidden` that must be allowed
+- `build_file_path`: URL-to-file mapping, query stripping, `index.html` for trailing `/`, rejection of relative and `..` paths, and buffer-size limits
+- `is_inside_root`: containment, including sibling directories such as `public_secret/` that share the root's prefix
+
+**Integration tests** ([`tests/integration.sh`](tests/integration.sh), 34 checks): start the real server and send it requests with `curl` and raw TCP.
+- Startup: the server refuses to start without `public/`
+- Static files: status codes, `Content-Length`, and a 5 MB file compared byte-for-byte
+- Path traversal: every attack from the table above, including symlinks to files, to directories, and to a sibling of `public/`
+- Request handling: `405`, `400`, `431`, a request split across two writes, the `408` timeout, and empty connections
+- Resources: no file descriptor leaks after 100 mixed requests (counted via `/proc/<pid>/fd`), the server is still running, and no AddressSanitizer reports
+
+The integration script creates its test files and symlinks inside `public/` and removes them on exit, even if a check fails. It can also be run on its own from the repo root:
+
+```sh
+tests/integration.sh
+```
+
+Both suites exit non-zero on any failure. They were also checked against deliberately broken builds: removing the sibling-directory check or the `close()` on the directory path makes them fail.
+
 ## Project Structure
 
 ```
@@ -90,6 +119,9 @@ c-server/
 │   ├── server.h
 │   └── request.h
 ├── public/           # Document root (sample site)
+├── tests/
+│   ├── test_paths.c      # Unit tests for path handling
+│   └── integration.sh    # End-to-end tests against the running server
 └── CMakeLists.txt
 ```
 
@@ -127,6 +159,7 @@ c-server/
 
 **Phase 4: Proof**
 - [ ] Benchmarks with `wrk` against nginx
-- [ ] Unit tests (CTest) and integration tests
+- [x] Unit tests (CTest) and integration tests for path handling and request handling
+- [ ] Unit tests for request parsing (once the full HTTP parser exists)
 - [ ] Fuzzing the request parser with libFuzzer
 - [ ] CI with sanitizers on every push
