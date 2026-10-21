@@ -104,6 +104,22 @@ static void send_response(int clientSocket, const char *status, const char *cont
     send_all(clientSocket, response, len);
 }
 
+// Returns 1 if any '/'-separated segment of path is exactly "..", else 0.
+static int has_dot_dot_segment(const char *path) {
+    const char *start = path;
+
+    while (*path) {
+        int at_segment_start = (path == start || path[-1] == '/');
+        if (at_segment_start &&
+            path[0] == '.' && path[1] == '.' &&
+            (path[2] == '/' || path[2] == '\0')) {
+            return 1;
+        }
+        path++;
+    }
+    return 0;
+}
+
 // Converts a URL path to a file system path by prepending the document root and handling query parameters and default index files.
 // Returns PATH_SUCCESS, or the reason the path was rejected.
 static enum path_result build_file_path(const char *requestPath, char *filePath, size_t filePathSize) {
@@ -111,6 +127,7 @@ static enum path_result build_file_path(const char *requestPath, char *filePath,
         printf("Request path does not start with '/'\n");
         return PATH_BAD_REQUEST;
     }
+
     int len = snprintf(filePath, filePathSize, "%s%s", DOC_ROOT, requestPath);
     if (len < 0 || (size_t)len >= filePathSize) {
         printf("File path too long\n");
@@ -118,6 +135,11 @@ static enum path_result build_file_path(const char *requestPath, char *filePath,
     }
     size_t length_of_file_path = strcspn(filePath, "?");
     filePath[length_of_file_path] = '\0';
+
+    if (has_dot_dot_segment(filePath)) {
+        printf("Path traversal attempt: %s\n", requestPath);
+        return PATH_FORBIDDEN;
+    }
 
     // If the path ends with a slash, append index.html
     if (filePath[length_of_file_path - 1] == '/') {
