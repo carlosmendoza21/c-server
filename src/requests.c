@@ -9,12 +9,39 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <strings.h>
 #include "request.h"
 
 #define MAX_REQUEST_SIZE 8192
 #define READ_TIMEOUT_SECONDS 5
 #define DOC_ROOT "public"
 #define FILE_CHUNK_SIZE 8192
+
+struct mime_type {
+    const char *extension;
+    const char *type;
+};
+
+static const struct mime_type mime_types[] = {
+    { ".html", "text/html; charset=utf-8" },
+    { ".htm",  "text/html; charset=utf-8" },
+    { ".css",  "text/css; charset=utf-8" },
+    { ".js",   "text/javascript; charset=utf-8" },
+    { ".json", "application/json" },
+    { ".png",  "image/png" },
+    { ".jpg",  "image/jpeg" },
+    { ".jpeg", "image/jpeg" },
+    { ".gif",  "image/gif" },
+    { ".txt",  "text/plain; charset=utf-8" },
+    { ".pdf",  "application/pdf" },
+    { ".zip",  "application/zip" },
+    { ".tar",  "application/x-tar" },
+    { ".mp3",  "audio/mpeg" },
+    { ".mp4",  "video/mp4" },
+    { ".svg",  "image/svg+xml" },
+    { ".ico",  "image/x-icon" },
+    { ".webp", "image/webp" },
+};
 
 enum read_result {
     READ_SUCCESS,
@@ -182,6 +209,21 @@ static int is_inside_root(const char *resolved) {
     return next == '/' || next == '\0';
 }
 
+// Returns the MIME type for the given file path based on its extension, or "application/octet-stream" if unknown.
+
+static const char *get_mime_type(const char *filePath) {
+    const char *dot = strrchr(filePath, '.');
+    const char *slash = strrchr(filePath, '/');
+    if (dot && (!slash || dot > slash)) {
+        for (size_t i = 0; i < sizeof(mime_types) / sizeof(mime_types[0]); i++) {
+            if (strcasecmp(dot, mime_types[i].extension) == 0) {
+                return mime_types[i].type;
+            }
+        }
+    }
+    return "application/octet-stream";
+}
+
 // Serves the file at DOC_ROOT + urlPath, or an error response if it can't.
 // Does not close clientSocket; handle_requests does that.
 static void serve_file(int clientSocket, const char *urlPath) {
@@ -255,11 +297,11 @@ static void serve_file(int clientSocket, const char *urlPath) {
     // TODO: pick Content-Type from the file extension (MIME types step)
     int len = snprintf(header, sizeof(header),
              "HTTP/1.1 200 OK\r\n"
-             "Content-Type: text/html\r\n"
+             "Content-Type: %s\r\n"
              "Content-Length: %lld\r\n"
              "Connection: close\r\n"
              "\r\n",
-             (long long)st.st_size);
+             get_mime_type(resolvedPath), (long long)st.st_size);
     if (len < 0 || (size_t)len >= sizeof(header)) {
         printf("Response header too large\n");
         goto close_file;

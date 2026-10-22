@@ -16,7 +16,8 @@ LOG="$TMP/server.log"
 
 # Files created inside the repo for the tests; all removed on exit.
 FIXTURES=(public/big.bin public/escape.md public/etc public/alias.html public/sib
-          public/notes..txt public/..hidden public/locked.html public_secret)
+          public/notes..txt public/..hidden public/locked.html public_secret
+          public/alias_css)
 
 pass() { PASS=$((PASS + 1)); echo "  PASS  $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL  $1"; }
@@ -60,6 +61,20 @@ expect_raw() {   # expect_raw <code> <description> <bytes> [timeout]
     if [ "$got" = "$1" ]; then pass "$1  $2"; else fail "$2: expected $1, got $got"; fi
 }
 
+# expect_header <path> <header-name> <expected-value>
+expect_header() {
+    local path="$1" name="$2" want="$3" got
+    # Header names are case-insensitive: match in lowercase, print everything after "Name:"
+    got=$(curl -s --max-time 3 -D - -o /dev/null "$BASE$path" | tr -d '\r' \
+          | awk -v n="$(echo "$name" | tr 'A-Z' 'a-z')" \
+                'tolower($1) == n":" { $1 = ""; sub(/^ /, ""); print }')
+    if [ "$got" = "$want" ]; then
+        pass "$name: $want  $path"
+    else
+        fail "$path $name: expected '$want', got '$got'"
+    fi
+}
+
 fd_count() { ls "/proc/$SERVER_PID/fd" | wc -l; }
 
 # ---------- Preconditions ----------
@@ -92,6 +107,7 @@ head -c 5000000 /dev/urandom > public/big.bin
 ln -s ../README.md public/escape.md            # points outside public/
 ln -s /etc public/etc                          # directory outside public/
 ln -s about.html public/alias.html             # stays inside public/
+ln -s css/style.css public/alias_css           # no extension; target is CSS
 mkdir -p public_secret && echo pw > public_secret/x.txt
 ln -s ../public_secret public/sib              # sibling sharing the "public" prefix
 echo hi > public/notes..txt
@@ -137,6 +153,16 @@ if curl -s "$BASE/big.bin" -o "$TMP/big.out" && cmp -s public/big.bin "$TMP/big.
 else
     fail "5 MB file differs after download"
 fi
+
+# ---------- Content types ----------
+
+echo "Content types"
+expect_header /               Content-Type "text/html; charset=utf-8"
+expect_header /about.html     Content-Type "text/html; charset=utf-8"
+expect_header /css/style.css  Content-Type "text/css; charset=utf-8"
+expect_header /big.bin        Content-Type "application/octet-stream"
+expect_header /alias_css      Content-Type "text/css; charset=utf-8"   # type comes from the resolved path
+expect_header /nope.html      Content-Type "text/plain"                # error responses stay text/plain
 
 # ---------- Path traversal ----------
 

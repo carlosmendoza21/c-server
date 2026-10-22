@@ -17,6 +17,10 @@ A from-scratch HTTP/1.1 static file server in C, built to explore low-level sock
 - Serves files from `public/` (e.g. `/css/style.css` → `public/css/style.css`)
 - `/` and any path ending in `/` map to `index.html`; query strings are ignored
 - Files are streamed in 8 KB chunks, so file size isn't limited by buffer size
+- `Content-Type` is chosen from the file extension: HTML, CSS, JavaScript, JSON, plain text, images (PNG, JPEG, GIF, SVG, WebP, ICO), PDF, ZIP/TAR, MP3 and MP4
+  - Text types include `charset=utf-8`; unknown extensions get `application/octet-stream`, so the browser downloads them instead of guessing
+  - Matching is case-insensitive, uses only the last extension (`archive.tar.gz` → `.gz`), and ignores dots in directory names
+  - The type comes from the resolved path, so a symlink is typed by its target
 - The file is opened first and then checked with `fstat()` on the descriptor (not `stat()` on the path), which avoids a time-of-check/time-of-use race; directories and other non-regular files are rejected
 
 ### Path traversal protection (defense in depth)
@@ -87,14 +91,16 @@ ctest --test-dir build --output-on-failure
 
 CTest runs two suites, both built with AddressSanitizer:
 
-**Unit tests** ([`tests/test_paths.c`](tests/test_paths.c), 40 checks): call the path-handling functions directly, with no server running. `test_paths.c` includes `requests.c` so it can reach its `static` functions.
+**Unit tests** ([`tests/test_paths.c`](tests/test_paths.c), 55 checks): call the path-handling functions directly, with no server running. `test_paths.c` includes `requests.c` so it can reach its `static` functions.
 - `has_dot_dot_segment`: whole-segment `..` detection, including names like `notes..txt` and `..hidden` that must be allowed
 - `build_file_path`: URL-to-file mapping, query stripping, `index.html` for trailing `/`, rejection of relative and `..` paths, and buffer-size limits
 - `is_inside_root`: containment, including sibling directories such as `public_secret/` that share the root's prefix
+- `get_mime_type`: table lookups plus the edge cases: uppercase extensions, `archive.tar.gz`, no extension, a dot in a directory name, and dotfiles
 
-**Integration tests** ([`tests/integration.sh`](tests/integration.sh), 34 checks): start the real server and send it requests with `curl` and raw TCP.
+**Integration tests** ([`tests/integration.sh`](tests/integration.sh), 40 checks): start the real server and send it requests with `curl` and raw TCP.
 - Startup: the server refuses to start without `public/`
 - Static files: status codes, `Content-Length`, and a 5 MB file compared byte-for-byte
+- Content types: HTML, CSS and unknown files, a symlink without an extension that points to a CSS file, and error responses staying `text/plain`
 - Path traversal: every attack from the table above, including symlinks to files, to directories, and to a sibling of `public/`
 - Request handling: `405`, `400`, `431`, a request split across two writes, the `408` timeout, and empty connections
 - Resources: no file descriptor leaks after 100 mixed requests (counted via `/proc/<pid>/fd`), the server is still running, and no AddressSanitizer reports
@@ -128,7 +134,6 @@ c-server/
 ## Known Limitations
 
 - **One connection at a time.** A slow client delays everyone else until its 5-second timeout expires. Fixing this is the next major phase.
-- **`Content-Type` is always `text/html`.** MIME type detection by file extension is in progress.
 - **No keep-alive.** Every response is sent with `Connection: close`.
 - **Only `GET` is supported.** `HEAD` returns `405`, and the `405` response doesn't yet include an `Allow` header.
 - **No percent-decoding of URLs.** Paths like `%20` aren't decoded yet. When decoding is added, it must happen before the traversal checks.
@@ -142,7 +147,7 @@ c-server/
 - [x] HTTP error responses
 - [x] Static file serving
 - [x] Path traversal protection
-- [ ] MIME types
+- [x] MIME types
 - [ ] Zero-copy file sending with `sendfile()`
 - [ ] Keep-alive, `HEAD`, `Allow` header
 

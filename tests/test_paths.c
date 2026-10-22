@@ -106,10 +106,37 @@ static void test_is_inside_root(void) {
     }
 }
 
+static void test_get_mime_type(void) {
+    struct { const char *path; const char *want; } cases[] = {
+        { "index.html", "text/html; charset=utf-8" },
+        { "style.css",  "text/css; charset=utf-8" },
+        { "script.js",  "text/javascript; charset=utf-8" },
+        { "data.json",  "application/json" },
+        { "image.png",  "image/png" },
+        { "photo.jpg",  "image/jpeg" },
+        { "document.pdf", "application/pdf" },
+        { "archive.zip",  "application/zip" },
+        { "unknownfile.xyz", "application/octet-stream" }, // unknown extension
+        { "/path/to/file.txt", "text/plain; charset=utf-8" },
+        { "public/PHOTO.PNG",      "image/png" },                // case-insensitive (why strcasecmp exists)
+        { "public/archive.tar.gz", "application/octet-stream" }, // only the last extension counts
+        { "public/README",         "application/octet-stream" }, // no extension
+        { "public/v1.2/readme",    "application/octet-stream" }, // dot is in a folder name
+        { "public/.hidden",        "application/octet-stream" }, // dotfile
+    };
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        const char *got = get_mime_type(cases[i].path);
+        CHECK(strcmp(got, cases[i].want) == 0, "get_mime_type(\"%s\") = \"%s\", expected \"%s\"",
+              cases[i].path, got, cases[i].want);
+    }
+}
+
 int main(void) {
     test_has_dot_dot_segment();
     test_build_file_path();
     test_is_inside_root();
+    test_get_mime_type();
+
 
     printf("\n%d/%d checks passed\n", checks - failures, checks);
     return failures == 0 ? 0 : 1;
